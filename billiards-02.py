@@ -100,7 +100,7 @@ a, b = 2, 1
 
 # Initial position and angle
 position = [0.0, 1.0]
-angle = np.pi / 4  # Initial direction angle
+angle = np.pi / 1.1  # Initial direction angle
 velocity = [np.cos(angle), np.sin(angle)]  # Initial velocity vector
 
 ellipse = Ellipse([0, 0], 2 * a, 2 * b, edgecolor='b', fc='None')
