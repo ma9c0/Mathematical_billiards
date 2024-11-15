@@ -6,10 +6,10 @@ from matplotlib.patches import Ellipse, Circle
 
 # Ellipse parameters and initial conditions
 a, b = 2, 1
-step = 0.1
-attraction_point = [0.0, 0.0]
-attraction_radius = 0.5
-gravity = 0.05
+step = 0.01
+attraction_point = [1.0, 1.0]
+attraction_radius = 1.0
+gravity = 0.01
 
 # Initial position and angle
 position = [0.0, 1.0]
@@ -42,7 +42,7 @@ ax_position_angle.set_xlim(-a - 1, a + 1)
 ax_position_angle.set_ylim(-np.pi, np.pi)  # Angle range in radians
 ax_position_angle.set_xlabel("x-coordinate")
 ax_position_angle.set_ylabel("Angle (radians)")
-position_angle_points, = ax_position_angle.plot([], [], 'go', markersize=3)
+position_angle_points, = ax_position_angle.plot([], [], 'go', markersize=1.5)
 position_angle_data = []
 
 # Check if collision occurs
