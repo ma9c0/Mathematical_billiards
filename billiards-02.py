@@ -5,15 +5,15 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Ellipse, Circle
 
 # Ellipse parameters and initial conditions
-a, b = 2, 1
+a, b = 2, 2
 step = 0.01
-attraction_point = [1.0, 1.0]
+attraction_point = [0.0, 0.0]
 attraction_radius = 1.0
-gravity = 0.01
+gravity = 0.00
 
 # Initial position and angle
 position = [0.0, 1.0]
-angle = np.pi / 4
+angle = np.pi / 4.5
 velocity = [np.cos(angle), np.sin(angle)]
 
 # Setting up the plots
