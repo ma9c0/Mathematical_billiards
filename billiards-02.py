@@ -5,15 +5,15 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Ellipse, Circle
 
 # Ellipse parameters and initial conditions
-a, b = 2, 2
+a, b = 4, 2
 step = 0.01
 attraction_point = [0.0, 0.0]
-attraction_radius = 1.0
-gravity = 0.00
+attraction_radius = 0.5
+gravity = 0.005
 
 # Initial position and angle
-position = [0.0, 1.0]
-angle = np.pi / 4.5
+position = [0.5, -1.5]
+angle = 2 * np.pi / 3
 velocity = [np.cos(angle), np.sin(angle)]
 
 # Setting up the plots
@@ -21,8 +21,8 @@ ellipse = Ellipse([0, 0], 2 * a, 2 * b, edgecolor='b', fc='None')
 a_point = Circle([attraction_point[0], attraction_point[1]], attraction_radius, edgecolor='r', fc='r', alpha=0.3)
 
 fig, (ax, ax_phase, ax_position_angle) = plt.subplots(1, 3, figsize=(15, 5))
-ax.set_xlim(-a - 1, a + 1)
-ax.set_ylim(-a - 1, a + 1)
+ax.set_xlim(-a-1, a+ 1)
+ax.set_ylim(-b-1, b+1)
 ax.add_patch(ellipse)
 ax.add_patch(a_point)
 ball, = ax.plot([], [], 'ro')
@@ -98,6 +98,11 @@ def ball_movements(frame):
         phase_data.append((x_0, tangent_velocity))
         phase_x, phase_y = zip(*phase_data)
         phase_points.set_data(phase_x, phase_y)
+        angle = np.arctan2(vy, vx)
+        position_angle_data.append((x_new, angle))
+        pa_x, pa_y = zip(*position_angle_data)
+        position_angle_points.set_data(pa_x, pa_y)
+        
 
     position = [x_new, y_new]
     trajectory.append((x_new, y_new))
@@ -106,12 +111,12 @@ def ball_movements(frame):
     ball.set_data([x_new], [y_new])
 
     # Calculate the angle of the velocity vector
-    angle = np.arctan2(vy, vx)
-    position_angle_data.append((x_new, angle))
-    pa_x, pa_y = zip(*position_angle_data)
-    position_angle_points.set_data(pa_x, pa_y)
+    # angle = np.arctan2(vy, vx)
+    # position_angle_data.append((x_new, angle))
+    # pa_x, pa_y = zip(*position_angle_data)
+    # position_angle_points.set_data(pa_x, pa_y)
 
     return ball, trajectory_line, phase_points, position_angle_points
 
-ani = FuncAnimation(fig, ball_movements, frames=200, interval=0.1, blit=True)
+ani = FuncAnimation(fig, ball_movements, frames=2000, interval=1, blit=True)
 plt.show()

@@ -2,145 +2,215 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Circle
-from scipy.optimize import root
 
-a, b = 2, 1
-attraction_point = [0.0, 0.0]
-attraction_radius = 0.5
-gravity = 0.01
+# ======================== Parameters =========================
+# Ellipse and attraction field parameters
+a, b = 4, 2                          # Ellipse semi-axes
+attraction_point = [0.0, 0.0]          # Attraction center (origin)
+attraction_radius = 0.5                # Field radius
+gravity = 0.000                        # Gravity magnitude (try 0.0 for no gravity)
 
-initial_conditions = [
-    # ([0.0, 1.5], np.pi / 3),
-    # ([1.5, 0.5], np.pi / 4),
-    # ([-1.5, 0.5], np.pi / 6),
-    ([0.5, -1.5],  2 * np.pi / 3)
-]
+# Initial state (matching your animation code)
+initial_position = [0.5, -1.5]
+initial_angle = 2 * math.pi / 3
+initial_velocity = [math.cos(initial_angle), math.sin(initial_angle)]
 
-fig, (ax_position, ax_position_angle) = plt.subplots(1, 2, figsize=(10, 5))
-colors = ['b', 'g', 'r', 'm']
+# ======================== Plot Setup =========================
+fig, (ax_traj, ax_pos_angle) = plt.subplots(1, 2, figsize=(12, 6))
+plot_color = 'm'
 
-ellipse = Ellipse([0, 0], 2 * a, 2 * b, edgecolor='b', fc='None')
-a_point = Circle([attraction_point[0], attraction_point[1]], attraction_radius, edgecolor='r', fc='r', alpha=0.3)
-ax_position.add_patch(ellipse)
-ax_position.add_patch(a_point)
-ax_position.set_xlim(-a-1, a+ 1)
-ax_position.set_ylim(-b-1, b+1)
-ax_position.set_xlabel('x')
-ax_position.set_ylabel('y')
+# Draw the ellipse and the attraction field.
+ellipse_patch = Ellipse([0, 0], 2*a, 2*b, edgecolor='b', facecolor='none')
+field_patch = Circle(attraction_point, attraction_radius, edgecolor='r', facecolor='r', alpha=0.3)
+ax_traj.add_patch(ellipse_patch)
+ax_traj.add_patch(field_patch)
+ax_traj.set_xlim(-a-1, a+1)
+ax_traj.set_ylim(-b-1, b+1)
+ax_traj.set_xlabel("x")
+ax_traj.set_ylabel("y")
+ax_traj.set_title("Trajectory")
 
-ax_position_angle.set_xlim(-a - 1, 3 * a + 1)
-ax_position_angle.set_ylim(0, np.pi)
-ax_position_angle.set_xlabel("x-coordinate")
-ax_position_angle.set_ylabel("Angle (radians)")
+ax_pos_angle.set_xlim(-a-1, a+1)
+ax_pos_angle.set_ylim(-math.pi, math.pi)
+ax_pos_angle.set_xlabel("x-coordinate")
+ax_pos_angle.set_ylabel("Angle (radians)")
+ax_pos_angle.set_title("(x, angle) Events")
+
+# ======================== Helper Functions =========================
+
+def safe_roots(coeffs):
+    """Trim near-zero leading coefficients and compute roots."""
+    coeffs = np.trim_zeros(np.array(coeffs), 'f')
+    if coeffs.size == 0:
+        return np.array([])
+    return np.roots(coeffs)
+
+def is_in_field(x, y):
+    """Return True if (x,y) lies inside (or on) the attraction field."""
+    return math.hypot(x - attraction_point[0], y - attraction_point[1]) <= attraction_radius
+
+def solve_linear_for_field(x, y, vx, vy, r):
+    """
+    Solve for t > 0 (using constant velocity) such that
+       (x + vx*t)^2 + (y + vy*t)^2 = r^2.
+    """
+    A = vx**2 + vy**2
+    B = 2*(x*vx + y*vy)
+    C = x**2 + y**2 - r**2
+    disc = B**2 - 4*A*C
+    if disc < 0:
+        return np.inf
+    roots = np.roots([A, B, C])
+    positive = [t.real for t in roots if np.isreal(t) and t.real > 1e-12]
+    return min(positive) if positive else np.inf
+
+def solve_accelerated_for_field(x, y, vx, vy, ax, ay, r):
+    """
+    Solve for the smallest positive t satisfying
+       [x + vx*t + 0.5*ax*t^2]^2 + [y + vy*t + 0.5*ay*t^2]^2 = r^2.
+    (This is a quartic in t which reduces to a quadratic if ax and ay are zero.)
+    """
+    # If acceleration is nearly zero, fall back to linear.
+    if math.isclose(ax, 0.0) and math.isclose(ay, 0.0):
+        return solve_linear_for_field(x, y, vx, vy, r)
+    # Coefficients:
+    A4 = 0.25 * (ax**2 + ay**2)
+    A3 = vx*ax + vy*ay
+    A2 = vx**2 + vy**2 + x*ax + y*ay  # Note: cross-term comes in linearly.
+    A1 = 2*(x*vx + y*vy)
+    A0 = x**2 + y**2 - r**2
+    coeffs = [A4, A3, A2, A1, A0]
+    roots = safe_roots(coeffs)
+    positive = [t.real for t in roots if np.isreal(t) and t.real > 1e-12]
+    return min(positive) if positive else np.inf
+
+def calculate_ellipse_collision(x, y, vx, vy, a, b):
+    """
+    Solve for t > 0 satisfying
+         ((x+vx*t)/a)^2 + ((y+vy*t)/b)^2 = 1.
+    Returns (t, x_coll, y_coll) if a solution exists, or None.
+    """
+    A = (vx**2)/(a**2) + (vy**2)/(b**2)
+    if math.isclose(A, 0.0):
+        return None
+    B = 2*((x*vx)/(a**2) + (y*vy)/(b**2))
+    C = (x**2)/(a**2) + (y**2)/(b**2) - 1
+    disc = B**2 - 4*A*C
+    if disc < 0:
+        return None
+    t1 = (-B + math.sqrt(disc))/(2*A)
+    t2 = (-B - math.sqrt(disc))/(2*A)
+    ts = [t for t in (t1, t2) if t > 1e-12]
+    if not ts:
+        return None
+    t_coll = min(ts)
+    return t_coll, x + vx*t_coll, y + vy*t_coll
 
 def reflect_off_ellipse(x, y, vx, vy, a, b):
-    normal_x = 2 * x / a ** 2
-    normal_y = 2 * y / b ** 2
-    normal_len = np.sqrt(normal_x ** 2 + normal_y ** 2)
-    normal_x /= normal_len
-    normal_y /= normal_len
-    dot_product = vx * normal_x + vy * normal_y
-    vx_reflected = vx - 2 * dot_product * normal_x
-    vy_reflected = vy - 2 * dot_product * normal_y
-    return vx_reflected, vy_reflected
+    """
+    Compute the reflection of velocity (vx,vy) off the ellipse at (x,y).
+    The outward normal (pointing away from the ellipse) is given by
+         n = (2x/a^2, 2y/b^2)  (then normalized).
+    Reflection: v_new = v - 2(v·n) n.
+    """
+    n_x = 2*x/(a**2)
+    n_y = 2*y/(b**2)
+    n_norm = math.hypot(n_x, n_y)
+    if math.isclose(n_norm, 0.0):
+        return vx, vy
+    n_x /= n_norm
+    n_y /= n_norm
+    dot = vx*n_x + vy*n_y
+    return vx - 2*dot*n_x, vy - 2*dot*n_y
 
-def calculate_reflection_position_angle(x, y, vx, vy, a, b):
-    A = (vx ** 2 / a ** 2) + (vy ** 2 / b ** 2)
-    B = 2 * ((x * vx) / a ** 2 + (y * vy) / b ** 2)
-    C = (x ** 2 / a ** 2) + (y ** 2 / b ** 2) - 1
-    t_collision = (-B + np.sqrt(B ** 2 - 4 * A * C)) / (2 * A)
-    x_new = x + vx * t_collision
-    y_new = y + vy * t_collision
-    return x_new, y_new, t_collision
+# ======================== Next Event Function ========================
 
-def calculate_touching_position_angle_of_attraction_field(x, y, vx, vy, a, b, m, n, gravity, num_field, num_edge, field):
-    # if gravity == 0.0:
-    #     return calculate_reflection_position_angle(x, y, vx, vy, a, b)
+def next_event(x, y, vx, vy):
+    """
+    Given the state (x,y,vx,vy), compute the time and state at the next event.
+    Two candidate events are considered:
+      • Ellipse collision (using constant-velocity motion).
+      • Crossing the attraction field boundary.
     
-    x_new, y_new, t_collision_to_shape = calculate_reflection_position_angle(x, y, vx, vy, a, b)
+    For the field event:
+      - If gravity == 0, or if the ball is outside the field, use linear motion.
+      - If the ball is inside the field and gravity ≠ 0, assume constant acceleration
+        computed at the current state:
+             a = -gravity · (x,y)/r.
     
-    #v = (x-m)*gravity*t+v_0
-    #p_1 = p_0 + v * t
-    
-    ax = (x-m)*gravity
-    bx, cx = vx, x - m
-    ay = (y-n)*gravity
-    by, cy = vy, y - n
-    
-    A = ax**2 + ay**2
-    B = 2 * (ax*bx+ay*by)
-    C = 2 * ax * cx + vx ** 2 + 2 * ay * cy + vy ** 2
-    D = 2 * (bx*cx + by*cy)
-    E = cx ** 2 + cy ** 2 - attraction_radius
-    coeffs = [A, B, C, D, E]
-    roots = np.roots(coeffs)
-    real_roots = roots[np.isreal(roots)].real
+    Returns:
+       (t_event, x_new, y_new, vx_new, vy_new, event_type)
+    with event_type being "ellipse" or "field".
+    """
+    # Candidate 1: Ellipse collision time (using linear motion).
+    ell_sol = calculate_ellipse_collision(x, y, vx, vy, a, b)
+    t_ellipse = ell_sol[0] if ell_sol is not None else np.inf
 
-    if len(real_roots) >= 0:
-        positive_times = [t for t in real_roots if t > 0]
-        if positive_times:
-            t_collision_to_attraction_field = min(positive_times)
-        else:
-            print("no pos sol")
-            t_collision_to_attraction_field = float('inf')
+    # Candidate 2: Field boundary crossing.
+    if gravity == 0:
+        t_field = solve_linear_for_field(x, y, vx, vy, attraction_radius)
+        ax_use, ay_use = 0.0, 0.0
     else:
-        print('no sol')
-        t_collision_to_attraction_field = float('inf')
-        
-    if t_collision_to_shape <= t_collision_to_attraction_field:
-        num_edge += 1
-        # print('time diff:', t_collision_to_attraction_field - t_collision_to_shape)
-        return x_new, y_new, t_collision_to_shape, num_field, num_edge, field
-    else:
-        x_new = x + vx * t_collision_to_attraction_field
-        y_new = y + vy * t_collision_to_attraction_field
-        print('pos changed:', x_new - x, y_new - y)
-        num_field += 1
-        field = True
-        return x_new, y_new, t_collision_to_attraction_field, num_field, num_edge, field
-
-for idx, (initial_position, initial_angle) in enumerate(initial_conditions):
-    position = initial_position
-    velocity = [np.cos(initial_angle), np.sin(initial_angle)]
-    position_angle_data = []
-    position_data = []
-    num_edge = 0
-    num_field = 0
-
-    n_reflection = 10 
-    for _ in range(n_reflection):
-        x_0, y_0 = position
-        vx, vy = velocity
-        field = False
-
-        x_new, y_new, t_collision, num_field, num_edge, field = calculate_touching_position_angle_of_attraction_field(
-            x_0, y_0, vx, vy, a, b, attraction_point[0], attraction_point[1], gravity, num_field, num_edge, field
-        )
-        
-        if t_collision > 0:
-            vx, vy = reflect_off_ellipse(x_new, y_new, vx, vy, a, b)
-            velocity = [vx, vy]
-
-            angle = np.arctan2(vy, vx)
-            if y_new > 0:
-                position_angle_data.append((x_new + 2 * a, abs(angle)))
+        if is_in_field(x, y):
+            r_val = math.hypot(x - attraction_point[0], y - attraction_point[1])
+            if math.isclose(r_val, 0.0):
+                ax_use, ay_use = 0.0, 0.0
             else:
-                position_angle_data.append((x_new, abs(angle)))
+                # Acceleration always points toward the attraction point.
+                ax_use = (attraction_point[0] - x) / r_val * gravity
+                ay_use = (attraction_point[1] - y) / r_val * gravity
+            t_field = solve_accelerated_for_field(x, y, vx, vy, ax_use, ay_use, attraction_radius)
+        else:
+            # Outside the field: no acceleration.
+            t_field = solve_linear_for_field(x, y, vx, vy, attraction_radius)
+            ax_use, ay_use = 0.0, 0.0
 
-            position = [x_new, y_new]
-            position_data.append((position[0],position[1]))
+    # Choose the next event (the one with the smaller positive time).
+    if t_ellipse <= t_field:
+        t_event = t_ellipse
+        x_new = x + vx*t_event
+        y_new = y + vy*t_event
+        vx_new, vy_new = reflect_off_ellipse(x_new, y_new, vx, vy, a, b)
+        event_type = "ellipse"
+    else:
+        t_event = t_field
+        # For field crossing, update using (possibly) constant acceleration.
+        x_new = x + vx*t_event + 0.5*ax_use*t_event**2
+        y_new = y + vy*t_event + 0.5*ay_use*t_event**2
+        vx_new = vx + ax_use*t_event
+        vy_new = vy + ay_use*t_event
+        event_type = "field"
+    return t_event, x_new, y_new, vx_new, vy_new, event_type
 
-    print('edge:', num_edge)
-    print('field:', num_field)
-    if position_angle_data:
-        pa_x, pa_y = zip(*position_angle_data)
-        # p_x, p_y = zip(*position_data)
-        ax_position_angle.plot(pa_x, pa_y, 'o', color=colors[idx], markersize=3, label=f'Initial condition {idx + 1}')
-        x_coords = [pos[0] for pos in position_data]
-        y_coords = [pos[1] for pos in position_data]
-        ax_position.plot(x_coords, y_coords, marker = 'o', color=colors[idx], label = f'condition {idx + 1}')
+# ======================== Main Simulation Loop ========================
 
-ax_position_angle.legend()
-ax_position.legend()
+# Initialize state.
+x, y = initial_position
+vx, vy = initial_velocity
+
+trajectory = []      # List of (x, y) positions.
+pos_angle_data = []  # List of (x, angle) events (angle computed from velocity).
+
+n_events = 100
+for _ in range(n_events):
+    t_event, x, y, vx, vy, event_type = next_event(x, y, vx, vy)
+    # Record the state at the event.
+    angle = math.atan2(vy, vx)
+    pos_angle_data.append((x, angle))
+    trajectory.append((x, y))
+    # (Optional) Uncomment to debug event details:
+    # print(f"Event: {event_type}, dt={t_event:.5f}, pos=({x:.5f}, {y:.5f}), angle={angle:.5f}")
+
+# ======================== Plot Results ========================
+
+# Trajectory plot.
+traj_x, traj_y = zip(*trajectory)
+ax_traj.plot(traj_x, traj_y, 'o-', color=plot_color, markersize=3, label="Trajectory")
+ax_traj.legend()
+
+# (x, angle) plot.
+pa_x, pa_angle = zip(*pos_angle_data)
+ax_pos_angle.plot(pa_x, pa_angle, 'o', color=plot_color, markersize=3, label="(x, angle)")
+ax_pos_angle.legend()
 
 plt.show()
