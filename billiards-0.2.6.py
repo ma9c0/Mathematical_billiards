@@ -6,7 +6,7 @@ from matplotlib.patches import Ellipse, Circle
 a, b = 2, 1
 attraction_point = [0.0, 0.0]
 attraction_radius = 0.5
-gravity = 0.0
+gravity = 100.0
 
 initial_conditions = [
     ([0.0, 1.5], np.pi / 3),
